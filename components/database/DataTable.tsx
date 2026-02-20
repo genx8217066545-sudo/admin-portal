@@ -2,14 +2,20 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Edit2, Trash2, Save, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit2, Trash2, Save, X, Braces } from 'lucide-react'
 import { deleteRecord, updateRecord } from '@/app/admin/database/actions'
 import { useRouter } from 'next/navigation'
+import JsonEditorModal from './JsonEditorModal'
 
 // Helper to determine headers from data
 function getHeaders(data: any[]): string[] {
     if (!data || data.length === 0) return []
     return Object.keys(data[0])
+}
+
+// Check if a value is a JSON object or array
+function isJsonValue(value: any): boolean {
+    return value !== null && typeof value === 'object'
 }
 
 export default function DataTable({ data, tableName }: { data: any[], tableName: string }) {
@@ -18,6 +24,15 @@ export default function DataTable({ data, tableName }: { data: any[], tableName:
     const [editForm, setEditForm] = useState<any>({})
     const [loading, setLoading] = useState(false)
     const router = useRouter()
+
+    // JSON modal state
+    const [jsonModal, setJsonModal] = useState<{
+        isOpen: boolean
+        fieldName: string
+        value: any
+        readOnly: boolean
+        rowId?: string | number
+    }>({ isOpen: false, fieldName: '', value: null, readOnly: true })
 
     if (!data || data.length === 0) {
         return (
@@ -66,11 +81,87 @@ export default function DataTable({ data, tableName }: { data: any[], tableName:
         }
     }
 
-    const handleInputChange = (header: string, value: string) => {
+    const handleInputChange = (header: string, value: any) => {
         setEditForm((prev: any) => ({
             ...prev,
             [header]: value
         }))
+    }
+
+    // Open JSON modal in read-only mode (view)
+    const openJsonViewer = (fieldName: string, value: any) => {
+        setJsonModal({ isOpen: true, fieldName, value, readOnly: true })
+    }
+
+    // Open JSON modal in edit mode
+    const openJsonEditor = (fieldName: string, value: any, rowId: string | number) => {
+        setJsonModal({ isOpen: true, fieldName, value, readOnly: false, rowId })
+    }
+
+    const handleJsonSave = (parsedValue: any) => {
+        if (jsonModal.fieldName) {
+            handleInputChange(jsonModal.fieldName, parsedValue)
+        }
+    }
+
+    // Render a cell value
+    const renderCellValue = (row: any, header: string, isEditing: boolean) => {
+        const value = isEditing ? editForm[header] : row[header]
+
+        // Non-editable fields
+        if (header === 'id' || header === 'created_at') {
+            if (isJsonValue(row[header])) {
+                return (
+                    <button
+                        onClick={() => openJsonViewer(header, row[header])}
+                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
+                    >
+                        <Braces className="h-3 w-3" />
+                        JSON
+                    </button>
+                )
+            }
+            return <span>{String(row[header])}</span>
+        }
+
+        // JSON/object fields
+        if (isJsonValue(value)) {
+            if (isEditing) {
+                return (
+                    <button
+                        onClick={() => openJsonEditor(header, editForm[header], row.id)}
+                        className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors cursor-pointer"
+                    >
+                        <Edit2 className="h-3 w-3" />
+                        Edit JSON
+                    </button>
+                )
+            }
+            return (
+                <button
+                    onClick={() => openJsonViewer(header, value)}
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
+                >
+                    <Braces className="h-3 w-3" />
+                    JSON
+                </button>
+            )
+        }
+
+        // Regular editable fields
+        if (isEditing) {
+            return (
+                <input
+                    type="text"
+                    value={editForm[header] !== undefined ? String(editForm[header]) : ''}
+                    onChange={(e) => handleInputChange(header, e.target.value)}
+                    className="w-full rounded-md border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+            )
+        }
+
+        // Regular view
+        return <span>{String(value)}</span>
     }
 
     return (
@@ -101,18 +192,7 @@ export default function DataTable({ data, tableName }: { data: any[], tableName:
                                 <tr key={rowId} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors">
                                     {headers.map((header) => (
                                         <td key={`${rowIndex}-${header}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                                            {isEditing && header !== 'id' && header !== 'created_at' ? (
-                                                <input
-                                                    type="text"
-                                                    value={editForm[header] !== undefined ? (typeof editForm[header] === 'object' ? JSON.stringify(editForm[header]) : editForm[header]) : ''}
-                                                    onChange={(e) => handleInputChange(header, e.target.value)}
-                                                    className="w-full rounded-md border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                />
-                                            ) : (
-                                                typeof row[header] === 'object' ?
-                                                    <span className="font-mono text-xs text-gray-500">{JSON.stringify(row[header]).substring(0, 30)}...</span>
-                                                    : String(row[header])
-                                            )}
+                                            {renderCellValue(row, header, isEditing)}
                                         </td>
                                     ))}
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -161,6 +241,16 @@ export default function DataTable({ data, tableName }: { data: any[], tableName:
                     </button>
                 </div>
             </div>
+
+            {/* JSON Editor Modal */}
+            <JsonEditorModal
+                isOpen={jsonModal.isOpen}
+                onClose={() => setJsonModal({ ...jsonModal, isOpen: false })}
+                onSave={handleJsonSave}
+                fieldName={jsonModal.fieldName}
+                initialValue={jsonModal.value}
+                readOnly={jsonModal.readOnly}
+            />
         </div>
     )
 }

@@ -1,6 +1,6 @@
 
-import Sidebar from '@/components/admin/Sidebar'
-import Header from '@/components/admin/Header'
+import AdminShell from '@/components/admin/AdminShell'
+import { ActiveProjectProvider } from '@/components/admin/ActiveProjectContext'
 import { getProjects } from './projects/actions'
 import { cookies } from 'next/headers'
 
@@ -14,14 +14,10 @@ export default async function AdminLayout({
     const activeProjectId = cookieStore.get('active_project_id')?.value
 
     return (
-        <div className="flex h-screen overflow-hidden bg-gray-100 dark:bg-zinc-950">
-            <Sidebar projects={projects} activeProjectId={activeProjectId} />
-            <div className="flex flex-1 flex-col overflow-hidden">
-                <Header />
-                <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
-                    {children}
-                </main>
-            </div>
-        </div>
+        <AdminShell projects={projects} activeProjectId={activeProjectId}>
+            <ActiveProjectProvider projectId={activeProjectId}>
+                {children}
+            </ActiveProjectProvider>
+        </AdminShell>
     )
 }

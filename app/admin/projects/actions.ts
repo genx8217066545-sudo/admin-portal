@@ -100,6 +100,8 @@ export async function switchProject(projectId: string) {
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
     cookieStore.set('active_project_id', projectId)
-    revalidatePath('/admin')
+    // Revalidate the entire admin layout tree so ALL sub-pages
+    // (users, database, app-config, etc.) re-fetch with the new project
+    revalidatePath('/admin', 'layout')
     return { success: true }
 }
