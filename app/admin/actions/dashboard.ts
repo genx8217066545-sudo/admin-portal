@@ -1,14 +1,15 @@
 'use server'
 
 import { createTargetClient } from '@/utils/supabase/target-client'
+import { cookies } from 'next/headers'
 
 export async function getDashboardStats() {
     try {
         const supabase = await createTargetClient()
 
         // 1. Total Users (Use Admin API for reliability and to verify Service Key)
-        const { data: listUsersData, error: authError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
-        const totalUsers = (listUsersData as any)?.total || 0
+        const { data: authData, error: authError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
+        const totalUsers = (authData as any)?.total || 0
 
         // 2. Database Status & Check Custom Tables
         // We'll check if 'profiles' exists by trying a simple count. 
@@ -42,6 +43,9 @@ export async function getDashboardStats() {
             recentSignups = count || 0
         }
 
+        const cookieStore = await cookies()
+        const activeProjectId = cookieStore.get('active_project_id')?.value || 'None'
+
         return {
             totalUsers: totalUsers || 0,
             activeApps: activeApps,
@@ -49,7 +53,7 @@ export async function getDashboardStats() {
             dbStatus: (authError || tableError) ? 'Error' : 'Operational',
             // Debug Info
             debug: {
-                projectId: (await (await import('next/headers')).cookies()).get('active_project_id')?.value || 'None',
+                projectId: activeProjectId,
                 connectedUrl: (supabase as any)?.supabaseUrl || 'Unknown',
                 authError: authError?.message || null,
                 tableError: tableError?.message || null
