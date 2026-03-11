@@ -7,8 +7,8 @@ export async function getDashboardStats() {
         const supabase = await createTargetClient()
 
         // 1. Total Users (Use Admin API for reliability and to verify Service Key)
-        const { data: { users }, error: authError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
-        const totalUsers = await supabase.auth.admin.listUsers().then(res => res.data.total || 0)
+        const { data: listUsersData, error: authError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
+        const totalUsers = (listUsersData as any)?.total || 0
 
         // 2. Database Status & Check Custom Tables
         // We'll check if 'profiles' exists by trying a simple count. 
