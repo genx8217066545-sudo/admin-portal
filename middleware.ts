@@ -9,73 +9,92 @@ export async function middleware(request: NextRequest) {
         },
     })
 
-    // Create an authenticated Supabase client
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                get(name: string) {
-                    return request.cookies.get(name)?.value
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    // If environment variables are missing, we can't initialize Supabase.
+    // We log and proceed to prevent a hard crash of the middleware.
+    if (!supabaseUrl || !supabaseAnonKey) {
+        console.warn('Supabase environment variables are missing in middleware.')
+        return response
+    }
+
+    try {
+        // Create an authenticated Supabase client
+        const supabase = createServerClient(
+            supabaseUrl,
+            supabaseAnonKey,
+            {
+                cookies: {
+                    get(name: string) {
+                        return request.cookies.get(name)?.value
+                    },
+                    set(name: string, value: string, options: CookieOptions) {
+                        // If the cookie is updated, update the request and response
+                        request.cookies.set({
+                            name,
+                            value,
+                            ...options,
+                        })
+                        response = NextResponse.next({
+                            request: {
+                                headers: request.headers,
+                            },
+                        })
+                        response.cookies.set({
+                            name,
+                            value,
+                            ...options,
+                        })
+                    },
+                    remove(name: string, options: CookieOptions) {
+                        request.cookies.set({
+                            name,
+                            value: '',
+                            ...options,
+                        })
+                        response = NextResponse.next({
+                            request: {
+                                headers: request.headers,
+                            },
+                        })
+                        response.cookies.set({
+                            name,
+                            value: '',
+                            ...options,
+                        })
+                    },
                 },
-                set(name: string, value: string, options: CookieOptions) {
-                    // If the cookie is updated, update the request and response
-                    request.cookies.set({
-                        name,
-                        value,
-                        ...options,
-                    })
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    })
-                    response.cookies.set({
-                        name,
-                        value,
-                        ...options,
-                    })
-                },
-                remove(name: string, options: CookieOptions) {
-                    request.cookies.set({
-                        name,
-                        value: '',
-                        ...options,
-                    })
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    })
-                    response.cookies.set({
-                        name,
-                        value: '',
-                        ...options,
-                    })
-                },
-            },
+            }
+        )
+
+        // Refresh session if expired
+        // We use getUser() as it's more secure than getSession() as it revalidates with Supabase Auth
+        const { data: { user } } = await supabase.auth.getUser()
+
+        const { pathname } = request.nextUrl
+
+        // Protected routes logic
+        if (pathname.startsWith('/admin')) {
+            if (!user) {
+                return NextResponse.redirect(new URL('/login', request.url))
+            }
         }
-    )
 
-    // Refresh session if expired
-    const { data: { user } } = await supabase.auth.getUser()
-
-    // Protected routes logic
-    if (request.nextUrl.pathname.startsWith('/admin')) {
-        if (!user) {
+        if (pathname === '/') {
             return NextResponse.redirect(new URL('/login', request.url))
         }
-    }
 
-    if (request.nextUrl.pathname === '/') {
-        return NextResponse.redirect(new URL('/login', request.url))
-    }
+        if (pathname === '/login' && user) {
+            return NextResponse.redirect(new URL('/admin', request.url))
+        }
 
-    if (request.nextUrl.pathname === '/login' && user) {
-        return NextResponse.redirect(new URL('/admin', request.url))
+        return response
+    } catch (error) {
+        // Fallback for any unexpected errors to prevent MIDDLEWARE_INVOCATION_FAILED
+        console.error('Middleware error:', error)
+        return response
     }
-
-    return response
 }
 
 export const config = {
