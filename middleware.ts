@@ -3,6 +3,13 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl
+
+    // 1. Static Redirects (Always run these first, even if config is missing)
+    if (pathname === '/') {
+        return NextResponse.redirect(new URL('/login', request.url))
+    }
+
     let response = NextResponse.next({
         request: {
             headers: request.headers,
@@ -12,10 +19,10 @@ export async function middleware(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    // If environment variables are missing, we can't initialize Supabase.
-    // We log and proceed to prevent a hard crash of the middleware.
+    // If environment variables are missing, we can't initialize Supabase properly.
+    // We log and proceed to prevent a hard crash, but authenticated features will fail.
     if (!supabaseUrl || !supabaseAnonKey) {
-        console.warn('Supabase environment variables are missing in middleware.')
+        console.error('CRITICAL: Supabase environment variables are missing in middleware! Check Vercel Project Settings.')
         return response
     }
 
@@ -69,20 +76,13 @@ export async function middleware(request: NextRequest) {
         )
 
         // Refresh session if expired
-        // We use getUser() as it's more secure than getSession() as it revalidates with Supabase Auth
         const { data: { user } } = await supabase.auth.getUser()
 
-        const { pathname } = request.nextUrl
-
-        // Protected routes logic
+        // 2. Protected routes logic
         if (pathname.startsWith('/admin')) {
             if (!user) {
                 return NextResponse.redirect(new URL('/login', request.url))
             }
-        }
-
-        if (pathname === '/') {
-            return NextResponse.redirect(new URL('/login', request.url))
         }
 
         if (pathname === '/login' && user) {
@@ -92,7 +92,7 @@ export async function middleware(request: NextRequest) {
         return response
     } catch (error) {
         // Fallback for any unexpected errors to prevent MIDDLEWARE_INVOCATION_FAILED
-        console.error('Middleware error:', error)
+        console.error('Middleware execution error:', error)
         return response
     }
 }
